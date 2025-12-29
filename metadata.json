@@ -1,0 +1,7 @@
+{
+  "name": "SecureFace M2 Imagine",
+  "description": "Système de reconnaissance faciale pour accès sécurisé, développé pour le projet M2 Imagine. Supporte l'enregistrement de deux personnes et la détection d'intrus.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
