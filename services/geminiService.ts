@@ -1,36 +1,47 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { UserProfile, RecognitionResult } from "../types";
 
 export const analyzeFace = async (
   currentFrameBase64: string,
   authorizedUsers: UserProfile[]
 ): Promise<RecognitionResult> => {
-  // Fix: Initializing GoogleGenAI with process.env.API_KEY directly as per SDK guidelines.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Preparation of parts for Gemini
-  const parts = [];
+  const parts: any[] = [
+    {
+      text: `SYSTEM INSTRUCTION: You are a high-security biometric gatekeeper. 
+      Your database contains photos of specific authorized personnel.
+      
+      CRITICAL RULES:
+      1. Compare the 'PROBE' image against ALL 'TRAINING' images for each person.
+      2. If the person in the PROBE image is NOT one of the authorized individuals (even if they look slightly similar), you MUST respond with 'unknown'.
+      3. Be extremely sensitive to differences in facial geometry, ear shape, and hairline.
+      4. If confidence is below 0.85, default to 'unknown'.
+      5. Any person not explicitly in the training data is an INTRUDER.`
+    }
+  ];
   
-  // Add authorized users' photos if they exist
-  authorizedUsers.forEach((user, index) => {
-    if (user.photoBase64) {
+  authorizedUsers.forEach((user, userIdx) => {
+    if (user.photosBase64.length > 0) {
       parts.push({
-        text: `Authorized Person ${index + 1}: ${user.name}`
+        text: `### DATABASE SAMPLES FOR: ${user.name}`
       });
-      parts.push({
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: user.photoBase64.split(',')[1]
-        }
+      user.photosBase64.forEach((photo) => {
+        parts.push({
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: photo.split(',')[1]
+          }
+        });
       });
     }
   });
 
-  // Add the current frame to identify
   parts.push({
-    text: "Question: Is the person in this photo one of the authorized persons above? Or is it someone else (unknown)?"
+    text: "### PROBE IMAGE TO IDENTIFY\nDecide: Is this person Authorized Person 1, Authorized Person 2, or an 'unknown' intruder?"
   });
+  
   parts.push({
     inlineData: {
       mimeType: "image/jpeg",
@@ -49,15 +60,15 @@ export const analyzeFace = async (
           properties: {
             identifiedAs: { 
               type: Type.STRING, 
-              description: "The name of the authorized person or 'unknown' if not recognized." 
+              description: "Exact name of user or 'unknown'." 
             },
             confidence: { 
               type: Type.NUMBER, 
-              description: "Confidence level from 0 to 1." 
+              description: "Confidence score (0.0 to 1.0)." 
             },
             reasoning: { 
               type: Type.STRING, 
-              description: "Brief visual reasoning for the identification." 
+              description: "Brief comparison of facial features vs database samples." 
             }
           },
           required: ["identifiedAs", "confidence", "reasoning"]
@@ -65,7 +76,6 @@ export const analyzeFace = async (
       }
     });
 
-    // Fix: Access response.text directly (property, not a method).
     const result = JSON.parse(response.text || "{}");
     return {
       identifiedAs: result.identifiedAs || 'unknown',
@@ -74,10 +84,30 @@ export const analyzeFace = async (
     };
   } catch (error) {
     console.error("Gemini Error:", error);
-    return {
-      identifiedAs: 'unknown',
-      confidence: 0,
-      reasoning: "Erreur lors de la communication avec l'IA."
-    };
+    return { identifiedAs: 'unknown', confidence: 0, reasoning: "Erreur technique." };
   }
+};
+
+export const generateSpeech = async (text: string): Promise<Uint8Array | null> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+        },
+      },
+    });
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (base64Audio) {
+      const binaryString = atob(base64Audio);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+      return bytes;
+    }
+  } catch (e) { console.error(e); }
+  return null;
 };

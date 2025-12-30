@@ -10,14 +10,28 @@ import { View, UserProfile } from './types';
 const App: React.FC = () => {
   const [view, setView] = useState<View>(View.DASHBOARD);
   
-  // Initial state for two authorized users
+  // Initial state for two authorized users with photo arrays
   const [users, setUsers] = useState<UserProfile[]>([
-    { id: '1', name: 'Utilisateur A', photoBase64: null },
-    { id: '2', name: 'Utilisateur B', photoBase64: null }
+    { id: '1', name: 'Utilisateur A', photosBase64: [] },
+    { id: '2', name: 'Utilisateur B', photosBase64: [] }
   ]);
 
-  const handleUpdateUser = (id: string, name: string, photo: string | null) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, name, photoBase64: photo } : u));
+  const handleAddPhoto = (userId: string, photo: string) => {
+    setUsers(prev => prev.map(u => 
+      u.id === userId ? { ...u, photosBase64: [...u.photosBase64, photo] } : u
+    ));
+  };
+
+  const handleRemovePhoto = (userId: string, photoIndex: number) => {
+    setUsers(prev => prev.map(u => 
+      u.id === userId ? { ...u, photosBase64: u.photosBase64.filter((_, i) => i !== photoIndex) } : u
+    ));
+  };
+
+  const handleUpdateName = (userId: string, name: string) => {
+    setUsers(prev => prev.map(u => 
+      u.id === userId ? { ...u, name } : u
+    ));
   };
 
   const renderView = () => {
@@ -27,7 +41,14 @@ const App: React.FC = () => {
       case View.THEORY:
         return <TheorySection />;
       case View.REGISTRATION:
-        return <Registration users={users} onUpdateUser={handleUpdateUser} />;
+        return (
+          <Registration 
+            users={users} 
+            onAddPhoto={handleAddPhoto} 
+            onRemovePhoto={handleRemovePhoto} 
+            onUpdateName={handleUpdateName} 
+          />
+        );
       case View.DETECTION:
         return <DetectionDemo users={users} />;
       default:

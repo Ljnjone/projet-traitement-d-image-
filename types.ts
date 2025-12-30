@@ -9,7 +9,7 @@ export enum View {
 export interface UserProfile {
   id: string;
   name: string;
-  photoBase64: string | null;
+  photosBase64: string[];
 }
 
 export interface RecognitionResult {
