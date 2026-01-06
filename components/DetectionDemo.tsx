@@ -19,13 +19,34 @@ const DetectionDemo: React.FC<{ users: UserProfile[] }> = ({ users }) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  const playAudio = async (data: Uint8Array) => {
-    if (!audioContextRef.current) audioContextRef.current = new AudioContext({ sampleRate: 24000 });
-    const ctx = audioContextRef.current;
+  // Manual decoding of raw PCM data from Gemini TTS following the provided guidelines
+  const decodeAudioData = (
+    data: Uint8Array,
+    ctx: AudioContext,
+    sampleRate: number,
+    numChannels: number,
+  ): AudioBuffer => {
     const dataInt16 = new Int16Array(data.buffer);
-    const buffer = ctx.createBuffer(1, dataInt16.length, 24000);
-    const channelData = buffer.getChannelData(0);
-    for (let i = 0; i < dataInt16.length; i++) channelData[i] = dataInt16[i] / 32768.0;
+    const frameCount = dataInt16.length / numChannels;
+    const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+    for (let channel = 0; channel < numChannels; channel++) {
+      const channelData = buffer.getChannelData(channel);
+      for (let i = 0; i < frameCount; i++) {
+        channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+      }
+    }
+    return buffer;
+  };
+
+  const playAudio = async (data: Uint8Array) => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    }
+    const ctx = audioContextRef.current;
+    
+    // Create an audio buffer from the raw bytes returned by the API
+    const buffer = decodeAudioData(data, ctx, 24000, 1);
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(ctx.destination);
@@ -50,10 +71,15 @@ const DetectionDemo: React.FC<{ users: UserProfile[] }> = ({ users }) => {
       if (audioEnabled) {
         const msg = res.identifiedAs === 'unknown' ? "Intrus détecté ! Accès refusé." : `Identifié : ${res.identifiedAs}. Accès accordé.`;
         const audio = await generateSpeech(msg);
-        if (audio) playAudio(audio);
+        if (audio) {
+          await playAudio(audio);
+        }
       }
-    } catch (e) { console.error(e); }
-    finally { setIsAnalyzing(false); }
+    } catch (e) { 
+      console.error("Scanning error:", e); 
+    } finally { 
+      setIsAnalyzing(false); 
+    }
   };
 
   return (
@@ -138,7 +164,7 @@ const DetectionDemo: React.FC<{ users: UserProfile[] }> = ({ users }) => {
               {logs.map(log => (
                 <div key={log.id} className="flex gap-4 p-3 bg-gray-50 rounded-2xl border border-gray-100 items-center">
                   <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-white shadow-sm flex-shrink-0">
-                    <img src={log.image} className="w-full h-full object-cover" />
+                    <img src={log.image} className="w-full h-full object-cover" alt="Captured" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">

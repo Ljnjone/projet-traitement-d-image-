@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import CameraView from './CameraView';
 import { UserProfile } from '../types';
@@ -29,7 +28,8 @@ const Registration: React.FC<RegistrationProps> = ({ users, onAddPhoto, onRemove
     const files = e.target.files;
     if (!files) return;
 
-    Array.from(files).forEach(file => {
+    // Fix: Explicitly cast Array.from(files) to File[] to ensure the 'file' parameter is recognized as a valid Blob
+    (Array.from(files) as File[]).forEach(file => {
       const reader = new FileReader();
       reader.onloadend = () => {
         onAddPhoto(userId, reader.result as string);
